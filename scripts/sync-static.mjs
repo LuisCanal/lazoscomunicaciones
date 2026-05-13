@@ -33,15 +33,23 @@ const WPFORM_BLOCK =
 const FORM_AND_SCRIPT = `
 <section class="avia_codeblock_section avia_code_block_0" itemscope itemtype="https://schema.org/ContactPage">
   <div class="avia_codeblock" itemprop="text">
-<style>.contact-honeypot{position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden;}</style>
+<style>
+.contact-honeypot{position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden;}
+#sumate-form.contact-form-wrap .contact-field{margin:0 0 0.85em;}
+#sumate-form.contact-form-wrap .contact-sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0;}
+#sumate-form.contact-form-wrap input.wpcf7-form-control,
+#sumate-form.contact-form-wrap textarea.wpcf7-form-control{width:100%;max-width:100%;box-sizing:border-box;}
+#sumate-form.contact-form-wrap input.wpcf7-form-control::placeholder,
+#sumate-form.contact-form-wrap textarea.wpcf7-form-control::placeholder{color:#5a5a5a;opacity:1;}
+</style>
 <div class="contact-form-wrap" id="sumate-form">
 <form id="site-contact-form" method="post" aria-label="Formulario de contacto">
 <p class="contact-honeypot" aria-hidden="true"><label>Empresa <input type="text" name="company" tabindex="-1" autocomplete="off"></label></p>
-<p><label>Nombre y apellido (requerido)<br><input class="wpcf7-form-control" required type="text" name="name" id="cf-name" maxlength="400" autocomplete="name"></label></p>
-<p><label>Correo electrónico (requerido)<br><input class="wpcf7-form-control" required type="email" name="email" id="cf-email" maxlength="320" autocomplete="email"></label></p>
-<p><label>Mensaje<br><textarea class="wpcf7-form-control" name="message" id="cf-message" rows="6" maxlength="8000"></textarea></label></p>
-<p><label><span id="cf-captcha-question">Verificación</span> (requerido)<br>
-<input size="8" maxlength="4" class="wpcf7-form-control" required type="text" inputmode="numeric" pattern="[0-9]*" id="cf-captcha" autocomplete="off" title="Resultado de la suma"></label></p>
+<p class="contact-field"><label class="contact-sr-only" for="cf-name">Nombre y apellido (obligatorio)</label><input class="wpcf7-form-control" required type="text" name="name" id="cf-name" maxlength="400" autocomplete="name" placeholder="Nombre y apellido *"></p>
+<p class="contact-field"><label class="contact-sr-only" for="cf-email">Correo electrónico (obligatorio)</label><input class="wpcf7-form-control" required type="email" name="email" id="cf-email" maxlength="320" autocomplete="email" placeholder="Correo electrónico *"></p>
+<p class="contact-field"><label class="contact-sr-only" for="cf-message">Mensaje</label><textarea class="wpcf7-form-control" name="message" id="cf-message" rows="6" maxlength="8000" placeholder="Comentario o mensaje"></textarea></p>
+<p class="contact-field"><label class="contact-sr-only" for="cf-captcha">Verificación: resultado de la suma (obligatorio)</label>
+<input size="10" maxlength="4" class="wpcf7-form-control" required type="text" inputmode="numeric" pattern="[0-9]*" id="cf-captcha" autocomplete="off" title="Resultado de la suma" placeholder="Cargando verificación…" aria-describedby="cf-status"></p>
 <p><button class="wpcf7-form-control wpcf7-submit" type="submit" id="cf-submit">Enviar</button></p>
 <div id="cf-status" aria-live="polite" role="status" style="min-height:1.5em;color:#fff;"></div>
 </form>
@@ -52,13 +60,15 @@ const FORM_AND_SCRIPT = `
   if (!form) return;
   var statusEl = document.getElementById("cf-status");
   function loadCaptcha() {
-    var q = document.getElementById("cf-captcha-question");
     var cap = document.getElementById("cf-captcha");
     delete form.dataset.captchaN1;
     delete form.dataset.captchaN2;
     delete form.dataset.captchaSig;
-    if (q) q.textContent = "Cargando verificación…";
-    if (cap) cap.value = "";
+    if (cap) {
+      cap.value = "";
+      cap.placeholder = "Cargando verificación…";
+      cap.setAttribute("aria-label", "Verificación numérica");
+    }
     return fetch("/api/captcha", { method: "GET", credentials: "same-origin" })
       .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
       .then(function (x) {
@@ -66,9 +76,18 @@ const FORM_AND_SCRIPT = `
         form.dataset.captchaN1 = String(x.j.n1);
         form.dataset.captchaN2 = String(x.j.n2);
         form.dataset.captchaSig = x.j.sig;
-        if (q) q.textContent = "¿Cuánto es " + x.j.n1 + " + " + x.j.n2 + "? ";
+        if (cap) {
+          var ph = "¿Cuánto es " + x.j.n1 + " + " + x.j.n2 + "? *";
+          cap.placeholder = ph;
+          cap.setAttribute("aria-label", "¿Cuánto es " + x.j.n1 + " más " + x.j.n2 + "? Escribí el resultado.");
+        }
       })
-      .catch(function () { if (q) q.textContent = "Error al cargar verificación; recargá la página."; });
+      .catch(function () {
+        if (cap) {
+          cap.placeholder = "Error: recargá la página";
+          cap.setAttribute("aria-label", "Error al cargar la verificación");
+        }
+      });
   }
   loadCaptcha();
   form.addEventListener("submit", function (e) {
@@ -179,6 +198,22 @@ function fixQuienes(html) {
   );
 }
 
+/** Enfold + WP: imágenes con avia-img-lazy-loading suelen ir con loading=lazy y sizes="auto, …".
+ *  En sliders (.slide-entry-wrap visibility:hidden hasta el JS) Chrome puede no cargar/pintar el src.
+ *  Quitamos lazy + prefijo "auto," en sizes y la clase placeholder. */
+function fixAviaLazyImages(html) {
+  return html.replace(/<img\b([^>]*)>/gi, (full, inner) => {
+    if (!/avia-img-lazy-loading-\d+/.test(inner)) return full;
+    let s = inner
+      .replace(/\sloading="lazy"/gi, "")
+      .replace(/\sloading='lazy'/gi, "")
+      .replace(/\s*avia-img-lazy-loading-\d+\s*/g, " ")
+      .replace(/sizes\s*=\s*"auto,\s*/gi, 'sizes="')
+      .replace(/sizes\s*=\s*'auto,\s*/gi, "sizes='");
+    return `<img${s}>`;
+  });
+}
+
 function injectCanonicalAndDesc(html, title, description, path) {
   const canon = `${PROD}${path.endsWith("/") ? path : path + "/"}`;
   const block = `
@@ -249,6 +284,7 @@ async function main() {
   home = stripHead(home);
   home = stripFooterScripts(home);
   home = fixQuienes(home);
+  home = fixAviaLazyImages(home);
   home = home.replace(WPFORM_BLOCK, FORM_AND_SCRIPT);
   home = injectCanonicalAndDesc(
     home,
@@ -268,6 +304,7 @@ async function main() {
     h = absolutize(h);
     h = stripHead(h);
     h = stripFooterScripts(h);
+    h = fixAviaLazyImages(h);
     const titleM = h.match(/<title>([^<]*)<\/title>/i);
     const rawTitle = titleM ? titleM[1].replace(/\s*[–-]\s*Lazos.*$/i, "").trim() : sub;
     const desc = `${rawTitle} — Lazos Comunicaciones.`;
