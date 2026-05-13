@@ -214,6 +214,15 @@ function fixAviaLazyImages(html) {
   });
 }
 
+/** Pie de página: «Todos los Derechos Reservados YYYY» al año actual. */
+function refreshCopyrightYear(html) {
+  const y = String(new Date().getFullYear());
+  return html.replace(
+    /(Todos los Derechos Reservados )\d{4}(\s*\|\s*Lazos Comunicaciones)/gi,
+    `$1${y}$2`
+  );
+}
+
 function injectCanonicalAndDesc(html, title, description, path) {
   const canon = `${PROD}${path.endsWith("/") ? path : path + "/"}`;
   const block = `
@@ -292,6 +301,7 @@ async function main() {
     "Estrategia de comunicación, estudios de opinión y asesoramiento en Entre Ríos. Lazos Comunicaciones.",
     "/"
   );
+  home = refreshCopyrightYear(home);
   writeFileSync(join(ROOT, "index.html"), home, "utf8");
 
   for (const sub of SUBDIRS) {
@@ -310,6 +320,7 @@ async function main() {
     const desc = `${rawTitle} — Lazos Comunicaciones.`;
     const path = "/" + sub + "/";
     h = injectCanonicalAndDesc(h, `${rawTitle} | Lazos`, desc, path);
+    h = refreshCopyrightYear(h);
     const outDir = join(ROOT, sub);
     mkdirSync(outDir, { recursive: true });
     writeFileSync(join(outDir, "index.html"), h, "utf8");
